@@ -51,11 +51,10 @@ class VLM(PreTrainedModel):
       text_embeds = self.llm_model.get_input_embeddings()(input_ids)
 
       image_embeds = self.vision_model.vision_model(pixel_values).last_hidden_state
-      # text_embeds.shape torch.Size([8, 109, 896])
-      # image_embeds.shape torch.Size([8, 196, 768])
+
       b, s, d = image_embeds.shape
-      image_embeds = image_embeds.view(b, -1, d*4)  # (b, 196, d) --> (b, 49, d*4) 压缩图片tokens
-      image_features = self.linear2(F.silu(self.linear1(image_embeds)))
+      image_embeds = image_embeds.view(b, -1, d*4)  # (b, 196, d) --> (b, 49, d*4) 第二个维度对应seq_len,用来填充文本中用<|image_pad|>填充的部分
+      image_features = self.linear2(F.silu(self.linear1(image_embeds))) #图片第三个维度压缩成和文本一样的大小，后面将这部分填充文本中用<|image_pad|>填充的部分，需要保证长度一致
       
       text_embeds = text_embeds.to(image_features.dtype)
       

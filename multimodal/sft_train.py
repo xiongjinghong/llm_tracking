@@ -55,12 +55,6 @@ class SFTDataset(Dataset):
             image_name = str(sample['image'])
             conversations = sample['conversations']
             messages = [{"role":"system", "content":'You are a helpful assistant.'}]
-            # for conversation in conversations:
-            #     if conversation['from'] == 'human':
-            #         messages.append({"role":"user", "content":conversation['value']})
-            #     else:
-            #         messages.append({"role":"assistant", "content":conversation['value']})
-
             for conversation in conversations:
                 if conversation['role'] == 'user':
                     messages.append({"role":"user", "content":conversation['content']})
