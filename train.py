@@ -82,7 +82,117 @@ class VLM(PreTrainedModel):
       inputs_embeds[batch_indices, image_indices] = image_features.view(-1, embed_dim)
       
       return inputs_embeds
-    
 
+
+class MyDataset(Dataset):
+    def __init__(self, images_path, data_path, tokenizer, processor, config):
+        super().__init__()
+        self.data_path = data_path
+        self.images_path = images_path
+        self.tokenizer = tokenizer
+        self.processor = processor
+        self.config = config
+        with open(self.data_path, 'r', encoding='utf-8') as f:
+            self.datas = json.load(f)   
+        
+            
+    def __len__(self):
+        return len(self.datas)
+    
+    def __getitem__(self, index):
+        sample = self.datas[index]
+        try:
+            image_name = sample['image']
+            conversations = sample['conversations']
+            q_text = self.tokenizer.apply_chat_template([{"role":"system", "content":'You are a helpful assistant.'}, {"role":"user", "content":conversations[0]['value']}], \
+                tokenize=False, \
+                add_generation_prompt=True).replace('<image>', '<|image_pad|>'*self.config.image_pad_num)
+            a_text = conversations[1]['value'] + self.tokenizer.eos_token
+            q_input_ids = self.tokenizer(q_text)['input_ids']
+            a_input_ids = self.tokenizer(a_text)['input_ids']
+            input_ids = q_input_ids + a_input_ids
+            labels = [tokenizer.pad_token_id] * len(q_input_ids) + a_input_ids
+            input_ids = input_ids[:-1]
+            labels = labels[1:]
+        
+            
+            image = Image.open(os.path.join(self.images_path, image_name)).convert("RGB")
+            pixel_values = self.processor(text=None, images=image)['pixel_values']
+        except:
+            default_image = Image.new('RGB', (224, 224), color='white')
+            pixel_values = self.processor(text=None, images=default_image)['pixel_values']
+            q_text = self.tokenizer.apply_chat_template([{"role":"system", "content":'You are a helpful assistant.'}, {"role":"user", "content":"图片内容是什么\n<image>"}], \
+                tokenize=False, \
+                add_generation_prompt=True).replace('<image>', '<|image_pad|>'*self.config.image_pad_num)
+            a_text = '图片内容为空' + self.tokenizer.eos_token
+            q_input_ids = self.tokenizer(q_text)['input_ids']
+            a_input_ids = self.tokenizer(a_text)['input_ids']
+            input_ids = q_input_ids + a_input_ids
+            labels = [tokenizer.pad_token_id] * len(q_input_ids) + a_input_ids
+            input_ids = input_ids[:-1]#shift 偏移
+            labels = labels[1:]
+        
+        return {
+            'input_ids': input_ids,
+            'labels': labels,
+            'pixel_values': pixel_values
+        } 
+     
+
+class MyDataCollator:
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+    
+    def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, Any]:
+        max_len = max(len(feature['input_ids']) for feature in features)
+        input_ids = []
+        labels = []
+        pixel_values = []
+        for feature in features:
+            input_ids.append(feature['input_ids'] + [self.tokenizer.pad_token_id] * (max_len - len(feature['input_ids'])))
+            labels.append(feature['labels'] + [self.tokenizer.pad_token_id] * (max_len - len(feature['labels'])))
+            pixel_values.append(feature['pixel_values'])
+            
+        return {'input_ids': torch.tensor(input_ids, dtype=torch.long),
+                'labels': torch.tensor(labels, dtype=torch.long),
+                'pixel_values': torch.cat(pixel_values, dim=0)}
+
+
+if __name__ == '__main__':
+  config = VLMConfig(image_pad_num=49)
+  model = VLM(config).cuda()
+  print(model)
+  print(f'模型参数量为：{sum(p.numel() for p in model.parameters() if p.requires_grad)}')
+  images_path = './LLaVA-CC3M-Pretrain-595K/images'
+  data_path = './LLaVA-CC3M-Pretrain-595K/chat.json'
+  tokenizer = AutoTokenizer.from_pretrained(config.llm_model_path)
+  processor = AutoProcessor.from_pretrained(config.vision_model_path)
+  output_dir = 'save/pretrain' 
+  args = TrainingArguments(
+      output_dir=output_dir,
+      do_train=True,
+      per_device_train_batch_size=30,
+      learning_rate=1e-4,
+      num_train_epochs=5,
+      save_steps=500,
+      save_total_limit=2,
+      fp16=True,
+      gradient_accumulation_steps=8,
+      logging_steps=100,
+      report_to='tensorboard',
+      logging_dir='./logs', 
+      dataloader_pin_memory=True,
+      dataloader_num_workers=1
+  )
+  trainer = Trainer(
+      model=model,
+      args=args,
+      train_dataset=MyDataset(images_path, data_path, tokenizer, processor, config),
+      data_collator=MyDataCollator(tokenizer)  
+  )
+  
+  trainer.train(resume_from_checkpoint=False)
+  trainer.save_model('save/pretrain')
+  trainer.save_state()
     
     
