@@ -3,7 +3,13 @@
 
 | 文件夹        | 说明 |  |
 |------------|--|----|
-| multimodal | 图片加文本的一个demo | 
+| multimodal | 多模态| 
+| gpt | gpt 简化版| 
+| dpo | dpo 实现| 
 
 
-联系方式：xiongjinghong123@163.com
+联系方式：xiongjinghong123@163.com，欢迎交流
+
+
+
+
