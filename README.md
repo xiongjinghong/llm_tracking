@@ -4,10 +4,12 @@
 | 文件夹        | 说明 |  |
 |------------|--|----|
 | multimodal | 多模态| 
-| gpt | gpt 简化版| 
+| gpt | llm 简化版| 
 | moe | moe 实现| 
 | dpo | dpo 实现| 
+| ppo | ppo 实现| 
 | knowledge_distill |  输出分布对齐| 
+| s1 |  s1训练| 
 
 
 
